@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	taskQueue = "nexus-handler-task-queue"
+	taskQueue = "my-handler-task-queue"
 )
 
 func main() {
