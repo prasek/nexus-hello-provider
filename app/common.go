@@ -15,6 +15,9 @@ import (
 // some cases a failure will be returned as an error, in others the process may
 // exit with help info.
 func ParseClientOptionFlags(args []string) (client.Options, error) {
+
+	useTLS := true
+
 	// Parse args
 	set := flag.NewFlagSet("hello-world-mtls", flag.ExitOnError)
 	targetHost := set.String("target-host", "localhost:7233", "Host:port for the server")
@@ -27,37 +30,47 @@ func ParseClientOptionFlags(args []string) (client.Options, error) {
 	if err := set.Parse(args); err != nil {
 		return client.Options{}, fmt.Errorf("failed parsing args: %w", err)
 	} else if *clientCert == "" || *clientKey == "" {
-		return client.Options{}, fmt.Errorf("-client-cert and -client-key are required")
+		useTLS = false
+		//return client.Options{}, fmt.Errorf("-client-cert and -client-key are required")
 	}
 
 	// Load client cert
-	cert, err := tls.LoadX509KeyPair(*clientCert, *clientKey)
-	if err != nil {
-		return client.Options{}, fmt.Errorf("failed loading client cert and key: %w", err)
-	}
+	if !useTLS {
+		return client.Options{
+			HostPort:  *targetHost,
+			Namespace: *namespace,
+		}, nil
 
-	// Load server CA if given
-	var serverCAPool *x509.CertPool
-	if *serverRootCACert != "" {
-		serverCAPool = x509.NewCertPool()
-		b, err := os.ReadFile(*serverRootCACert)
+	} else {
+
+		cert, err := tls.LoadX509KeyPair(*clientCert, *clientKey)
 		if err != nil {
-			return client.Options{}, fmt.Errorf("failed reading server CA: %w", err)
-		} else if !serverCAPool.AppendCertsFromPEM(b) {
-			return client.Options{}, fmt.Errorf("server CA PEM file invalid")
+			return client.Options{}, fmt.Errorf("failed loading client cert and key: %w", err)
 		}
-	}
 
-	return client.Options{
-		HostPort:  *targetHost,
-		Namespace: *namespace,
-		ConnectionOptions: client.ConnectionOptions{
-			TLS: &tls.Config{
-				Certificates:       []tls.Certificate{cert},
-				RootCAs:            serverCAPool,
-				ServerName:         *serverName,
-				InsecureSkipVerify: *insecureSkipVerify,
+		// Load server CA if given
+		var serverCAPool *x509.CertPool
+		if *serverRootCACert != "" {
+			serverCAPool = x509.NewCertPool()
+			b, err := os.ReadFile(*serverRootCACert)
+			if err != nil {
+				return client.Options{}, fmt.Errorf("failed reading server CA: %w", err)
+			} else if !serverCAPool.AppendCertsFromPEM(b) {
+				return client.Options{}, fmt.Errorf("server CA PEM file invalid")
+			}
+		}
+
+		return client.Options{
+			HostPort:  *targetHost,
+			Namespace: *namespace,
+			ConnectionOptions: client.ConnectionOptions{
+				TLS: &tls.Config{
+					Certificates:       []tls.Certificate{cert},
+					RootCAs:            serverCAPool,
+					ServerName:         *serverName,
+					InsecureSkipVerify: *insecureSkipVerify,
+				},
 			},
-		},
-	}, nil
+		}, nil
+	}
 }
